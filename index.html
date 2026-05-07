@@ -488,7 +488,7 @@ function jsonToYaml(obj, indent = 0) {
   if (Array.isArray(obj)) {
     for (const item of obj) {
       if (typeof item === 'object' && item !== null) {
-        result += `${spaces}- ${jsonToYaml(item, indent + 1).trim().slice(2)}\n`;
+        result += `${spaces}-\n${jsonToYaml(item, indent + 1)}`;
       } else {
         result += `${spaces}- ${item}\n`;
       }
