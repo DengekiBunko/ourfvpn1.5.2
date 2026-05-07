@@ -72,7 +72,7 @@ async function decryptConfig(envelope) {
 function generateClashConfig(nodes) {
   const proxies = nodes.map(node => ({
     name: node.name || `节点-${node.server}`,
-    type: 'https',
+    type: 'http',
     server: node.server,
     port: node.port,
     tls: true,

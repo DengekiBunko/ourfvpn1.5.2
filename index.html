@@ -393,7 +393,7 @@ function generateSubscription() {
     const proxies = currentNodes.map((node, i) => {
       const proxy = {
         name: node.name || `节点-${i + 1}`,
-        type: 'https',
+        type: 'http',
         server: node.server,
         port: node.port,
         tls: true,
