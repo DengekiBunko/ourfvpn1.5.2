@@ -106,7 +106,7 @@ textarea {
   <div class="card">
     <h2>📡 配置源</h2>
     <div class="input-group">
-      <input type="text" id="configUrl" value="https://gitlab.com/zhifan999/fq/-/raw/main/config.json" placeholder="输入配置文件URL">
+      <input type="text" id="configUrl" value="https://github.com/DengekiBunko/ourfvpn1.5.2/config.json" placeholder="输入配置文件URL">
       <button class="btn" id="fetchBtn" onclick="fetchConfig()">获取配置</button>
     </div>
     <div id="log" class="log"></div>
@@ -234,6 +234,37 @@ async function decryptData(aesKey, ivB64, encryptedDataB64) {
   return new TextDecoder().decode(decrypted);
 }
 
+function normalizeConfigUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === 'github.com') {
+      const parts = parsed.pathname.replace(/^\//, '').split('/');
+      if (parts.length >= 3) {
+        const owner = parts[0];
+        const repo = parts[1];
+        let branch = 'main';
+        let filePath = parts.slice(2).join('/');
+
+        // 支持 github.com/user/repo/blob/branch/path/to/file
+        if (parts[2] === 'blob' && parts.length >= 5) {
+          branch = parts[3];
+          filePath = parts.slice(4).join('/');
+        }
+
+        // 支持 github.com/user/repo/config.json 这种简化链接
+        if (parts.length === 3) {
+          filePath = parts[2];
+        }
+
+        return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filePath}`;
+      }
+    }
+  } catch (e) {
+    // ignore invalid URL
+  }
+  return url;
+}
+
 async function decryptConfig(envelope) {
   log('正在导入私钥...');
   const privateKey = await importPrivateKey(PRIVATE_KEY_PEM);
@@ -292,11 +323,16 @@ async function fetchConfig() {
 
   try {
     log(`原始URL: ${url}`);
+    const normalizedUrl = normalizeConfigUrl(url);
+    if (normalizedUrl !== url) {
+      log(`已解析为 GitHub 原始文件 URL: ${normalizedUrl}`);
+    }
+
     let envelope = null;
 
     try {
       log('尝试直接获取配置...');
-      const directRes = await fetch(url, { mode: 'cors' });
+      const directRes = await fetch(normalizedUrl, { mode: 'cors' });
       if (directRes.ok) {
         envelope = await directRes.json();
         log('直接获取成功');
@@ -309,7 +345,7 @@ async function fetchConfig() {
 
     if (!envelope) {
       log('尝试通过CORS代理获取...');
-      envelope = await fetchWithProxy(url);
+      envelope = await fetchWithProxy(normalizedUrl);
     }
     log('配置获取成功');
 
