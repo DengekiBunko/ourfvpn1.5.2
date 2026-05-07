@@ -221,6 +221,20 @@ function hideNodePage() {
   mainPage.style.display = 'block';
 }
 
+function getNodeConfigText(node) {
+  const name = node.name || `${node.server}:${node.port}`;
+  return `${name} = https,${node.server},${node.port}`;
+}
+
+function copyNodeConfig(node) {
+  const copyText = getNodeConfigText(node);
+  navigator.clipboard.writeText(copyText).then(() => {
+    alert(`已复制配置:\n${copyText}`);
+  }).catch(() => {
+    alert('复制失败，请手动复制节点信息。');
+  });
+}
+
 backBtn.addEventListener('click', hideNodePage);
 
 function loadNodeList() {
@@ -264,6 +278,7 @@ function renderNodeList(nodes) {
 
       const isActive = node.server === activeServer;
       const flagActive = isActive ? ' active' : '';
+      const detailText = node.server && node.port ? `${node.server}:${node.port}` : '未提供节点地址';
 
       item.innerHTML = `
         <div class="item-left">
@@ -271,13 +286,23 @@ function renderNodeList(nodes) {
           <div>
             <div class="item-name">${node.name}</div>
             ${siClass ? `<div class="item-status" style="color:${statusColor}">${statusLabel}</div>` : ''}
+            <div class="item-detail">${detailText}</div>
           </div>
         </div>
         <div class="item-right">
           ${siClass ? `<span class="${siClass}"></span>` : ''}
+          <button class="copy-btn" title="复制该节点的 V2RayN/Clash HTTPS 代理配置">复制配置</button>
           ${isActive ? '<div class="check-on"></div>' : '<div class="check-off"></div>'}
         </div>
       `;
+
+      const copyBtn = item.querySelector('.copy-btn');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          copyNodeConfig(node);
+        });
+      }
 
       if (node.status !== 'fail') {
         item.addEventListener('click', () => {
