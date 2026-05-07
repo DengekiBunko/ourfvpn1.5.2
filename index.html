@@ -106,7 +106,7 @@ textarea {
   <div class="card">
     <h2>📡 配置源</h2>
     <div class="input-group">
-      <input type="text" id="configUrl" value="https://dengekibunko.github.io/ourfvpn1.5.2/config.json" placeholder="输入配置文件URL">
+      <input type="text" id="configUrl" value="https://gitlab.com/zhifan999/fq/-/raw/main/config.json" placeholder="输入配置文件URL">
       <button class="btn" id="fetchBtn" onclick="fetchConfig()">获取配置</button>
     </div>
     <div id="log" class="log"></div>
@@ -335,7 +335,7 @@ function renderNodes() {
           <div class="node-server">${node.server}:${node.port}</div>
         </div>
       </div>
-      <span class="node-status status-ok">HTTP</span>
+      <span class="node-status status-ok">HTTPS</span>
     </div>
   `).join('');
 }
@@ -367,17 +367,18 @@ function generateSubscription() {
       const userinfo = node.username && node.password 
         ? `${encodeURIComponent(node.username)}:${encodeURIComponent(node.password)}@` 
         : '';
-      return `${name}=http://${userinfo}${node.server}:${node.port}`;
+      return `${name}=https://${userinfo}${node.server}:${node.port}`;
     });
     window.currentExportContent = vmessLinks.join('\n');
   } else if (currentFormat === 'clash') {
     const proxies = currentNodes.map((node, i) => {
       const proxy = {
         name: node.name || `节点-${i + 1}`,
-        type: 'http',
+        type: 'https',
         server: node.server,
         port: node.port,
-        tls: false
+        tls: true,
+        skip_cert_verify: true
       };
       if (node.username) proxy.username = node.username;
       if (node.password) proxy.password = node.password;
@@ -440,11 +441,11 @@ function copySubscriptionUrl() {
   let subUrl;
   const base64 = utf8ToBase64(window.currentExportContent).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
   if (currentFormat === 'v2rayn') {
-    subUrl = `https://dengekibunko.github.io/ourfvpn1.5.2/subscribe?type=v2rayn&data=${base64}`;
+    subUrl = `https://www.githubip.xyz/subscribe?type=v2rayn&data=${base64}`;
   } else if (currentFormat === 'clash') {
-    subUrl = `https://dengekibunko.github.io/ourfvpn1.5.2/subscribe?type=clash&data=${base64}`;
+    subUrl = `https://www.githubip.xyz/subscribe?type=clash&data=${base64}`;
   } else {
-    subUrl = `https://dengekibunko.github.io/ourfvpn1.5.2/subscribe?type=json&data=${base64}`;
+    subUrl = `https://www.githubip.xyz/subscribe?type=json&data=${base64}`;
   }
 
   document.getElementById('exportArea').value = subUrl;
