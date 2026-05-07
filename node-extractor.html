@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FanVPN 节点提取工具</title>
+<title>FanVPN 节点提取工具 - v2rayN版</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -39,6 +39,7 @@ h1 { color: #00ff94; margin-bottom: 10px; font-size: 24px; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-secondary { background: #2a3555; color: #fff; }
 .btn-secondary:hover:not(:disabled) { background: #3a4575; }
+.btn-small { padding: 8px 16px; font-size: 12px; }
 .node-list { max-height: 400px; overflow-y: auto; }
 .node-item {
   display: flex;
@@ -59,12 +60,13 @@ h1 { color: #00ff94; margin-bottom: 10px; font-size: 24px; }
 .status-ok { background: #00ff9433; color: #00ff94; }
 .status-fail { background: #ff475733; color: #ff4757; }
 .status-pending { background: #ffb54733; color: #ffb547; }
-.log { font-family: monospace; font-size: 12px; color: #888; margin-top: 10px; white-space: pre-wrap; word-break: break-all; }
+.log { font-family: monospace; font-size: 12px; color: #888; margin-top: 10px; white-space: pre-wrap; word-break: break-all; line-height: 1.6; }
 .error { color: #ff4757; }
 .success { color: #00ff94; }
-.input-group { display: flex; gap: 10px; margin-bottom: 15px; }
+.input-group { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
 input[type="text"] {
   flex: 1;
+  min-width: 200px;
   background: #1a2238;
   border: 1px solid #2a3555;
   padding: 12px 16px;
@@ -73,7 +75,6 @@ input[type="text"] {
   font-size: 14px;
 }
 input[type="text"]:focus { outline: none; border-color: #00ff94; }
-.export-area { margin-top: 15px; }
 textarea {
   width: 100%;
   height: 200px;
@@ -88,12 +89,19 @@ textarea {
 }
 .loading { display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; vertical-align: middle; margin-right: 8px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.tip { background: #1a2238; padding: 12px 16px; border-radius: 8px; margin-top: 15px; font-size: 13px; line-height: 1.6; }
+.tip-title { color: #ffb547; margin-bottom: 8px; font-weight: 600; }
+.tip code { background: #0a0e1a; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+.format-tabs { display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap; }
+.tab-btn { background: #2a3555; color: #888; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
+.tab-btn:hover { background: #3a4575; color: #fff; }
+.tab-btn.active { background: #00ff94; color: #0a0e1a; font-weight: 600; }
 </style>
 </head>
 <body>
 <div class="container">
   <h1>🛡️ FanVPN 节点提取工具</h1>
-  <p class="subtitle">纯浏览器端解密，无需上传任何数据，保护隐私安全</p>
+  <p class="subtitle">纯浏览器端解密，支持v2rayN HTTP订阅格式</p>
 
   <div class="card">
     <h2>📡 配置源</h2>
@@ -102,6 +110,13 @@ textarea {
       <button class="btn" id="fetchBtn" onclick="fetchConfig()">获取配置</button>
     </div>
     <div id="log" class="log"></div>
+    <div class="tip">
+      <div class="tip-title">💡 CORS跨域说明</div>
+      由于浏览器安全限制，直接从gitlab获取配置会被拦截。工具会自动尝试多个CORS代理：
+      <br>• <code>api.allorigins.win</code> - 推荐的免费代理
+      <br>• <code>cors-proxy.frabica.com</code> - 备用代理
+      <br>如果全部失败，请安装浏览器扩展 "CORS Unlock" 或 "Allow CORS"
+    </div>
   </div>
 
   <div class="card">
@@ -111,11 +126,26 @@ textarea {
 
   <div class="card">
     <h2>📤 导出订阅</h2>
-    <button class="btn" onclick="exportClash()">导出 Clash 订阅</button>
-    <button class="btn btn-secondary" onclick="exportJson()">导出 JSON</button>
-    <button class="btn btn-secondary" onclick="copySubscription()">复制订阅链接</button>
-    <div class="export-area">
+    <div class="format-tabs">
+      <button class="tab-btn active" onclick="switchFormat('v2rayn')">v2rayN HTTP</button>
+      <button class="tab-btn" onclick="switchFormat('clash')">Clash</button>
+      <button class="tab-btn" onclick="switchFormat('json')">JSON</button>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn" onclick="exportConfig()">📥 导出配置</button>
+      <button class="btn btn-secondary" onclick="copyConfig()">📋 复制</button>
+      <button class="btn btn-secondary" onclick="copySubscriptionUrl()">🔗 复制订阅链接</button>
+    </div>
+    <div class="export-area" style="margin-top:15px;">
       <textarea id="exportArea" placeholder="点击上方按钮生成配置..."></textarea>
+    </div>
+    <div class="tip" id="v2raynTip">
+      <div class="tip-title">📌 v2rayN 导入说明</div>
+      1. 打开v2rayN客户端
+      <br>2. 点击菜单: 订阅 → 订阅设置 → 添加
+      <br>3. 粘贴上述订阅链接到"地址"栏
+      <br>4. 点击确定后选择: 订阅 → 更新订阅
+      <br><br>或在v2rayN中直接: 服务器 → 剪贴板导入 → 从文本内容导入
     </div>
   </div>
 </div>
@@ -150,8 +180,14 @@ SF/pcEytM0rQhiJYmBXKeayUsICTxnSdixb42BSRDTL14F6Jzv2GcGRh80Jx1DVL
 zygLJrETnjWa1iAMPLnIB9lB
 -----END PRIVATE KEY-----`;
 
+const CORS_PROXIES = [
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://cors-proxy.frabica.com/?${url}`,
+];
+
 let currentConfig = null;
 let currentNodes = [];
+let currentFormat = 'v2rayn';
 
 function log(msg, type = '') {
   const logEl = document.getElementById('log');
@@ -212,6 +248,33 @@ async function decryptConfig(envelope) {
   return JSON.parse(jsonStr);
 }
 
+async function fetchWithProxy(url, proxyIndex = 0) {
+  if (proxyIndex >= CORS_PROXIES.length) {
+    throw new Error('所有CORS代理都失败了');
+  }
+
+  const proxyUrl = CORS_PROXIES[proxyIndex](url);
+  log(`尝试CORS代理 ${proxyIndex + 1}/${CORS_PROXIES.length}...`);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const res = await fetch(proxyUrl, {
+      signal: controller.signal,
+      mode: 'cors'
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (e) {
+    clearTimeout(timeout);
+    log(`代理 ${proxyIndex + 1} 失败: ${e.message}`);
+    return fetchWithProxy(url, proxyIndex + 1);
+  }
+}
+
 async function fetchConfig() {
   const url = document.getElementById('configUrl').value.trim();
   const btn = document.getElementById('fetchBtn');
@@ -227,10 +290,9 @@ async function fetchConfig() {
   btn.innerHTML = '<span class="loading"></span>获取中...';
 
   try {
-    log(`从 ${url} 获取配置...`);
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const envelope = await res.json();
+    log(`原始URL: ${url}`);
+    log('尝试通过CORS代理获取...');
+    const envelope = await fetchWithProxy(url);
     log('配置获取成功');
 
     log('开始解密...');
@@ -240,10 +302,14 @@ async function fetchConfig() {
     log(`解密成功！共 ${currentNodes.length} 个节点`, 'success');
     renderNodes();
     generateSubscription();
+    exportConfig();
   } catch (e) {
     log(`获取失败: ${e.message}`, 'error');
-    log('可能原因: CORS跨域限制 或 网络问题', 'error');
-    log('提示: 可尝试使用浏览器扩展如 "CORS Unlock" 或 "Allow CORS"', 'error');
+    log('', 'error');
+    log('请尝试以下方法:', 'error');
+    log('1. 安装浏览器扩展 "CORS Unlock"', 'error');
+    log('2. 或使用在线编辑器如 CodePen/JSFiddle', 'error');
+    log('3. 或在本地搭建简单HTTP服务器', 'error');
   } finally {
     btn.disabled = false;
     btn.textContent = '获取配置';
@@ -270,77 +336,111 @@ function renderNodes() {
           <div class="node-server">${node.server}:${node.port}</div>
         </div>
       </div>
-      <span class="node-status status-pending">HTTPS</span>
+      <span class="node-status status-ok">HTTP</span>
     </div>
   `).join('');
+}
+
+function switchFormat(format) {
+  currentFormat = format;
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+  document.querySelector(`.tab-btn[onclick="switchFormat('${format}')"]`).classList.add('active');
+
+  const v2raynTip = document.getElementById('v2raynTip');
+  if (format === 'v2rayn') {
+    v2raynTip.style.display = 'block';
+  } else {
+    v2raynTip.style.display = 'none';
+  }
+
+  if (currentNodes.length) {
+    generateSubscription();
+    exportConfig();
+  }
 }
 
 function generateSubscription() {
   if (!currentNodes.length) return;
 
-  const proxies = currentNodes.map(node => ({
-    name: node.name || `节点-${node.server}`,
-    type: 'https',
-    server: node.server,
-    port: node.port,
-    tls: true,
-    skip_cert_verify: true
-  }));
-
-  const clashConfig = {
-    proxies,
-    'proxy-groups': [
-      {
+  if (currentFormat === 'v2rayn') {
+    const vmessLinks = currentNodes.map((node, i) => {
+      const obj = {
+        v: '2',
+        ps: node.name || `节点-${i + 1}`,
+        add: node.server,
+        port: node.port,
+        id: '00000000-0000-0000-0000-000000000000',
+        aid: '0',
+        net: 'http',
+        type: 'none',
+        host: '',
+        path: '',
+        tls: 'tls'
+      };
+      const jsonStr = JSON.stringify(obj);
+      const base64 = btoa(jsonStr).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+      return `vmess://${base64}`;
+    });
+    window.currentExportContent = vmessLinks.join('\n');
+  } else if (currentFormat === 'clash') {
+    const proxies = currentNodes.map(node => ({
+      name: node.name,
+      type: 'http',
+      server: node.server,
+      port: node.port,
+      tls: false
+    }));
+    const clashConfig = {
+      proxies,
+      'proxy-groups': [{
         name: '自动选择',
         type: 'url-test',
         proxies: proxies.map(p => p.name),
         url: 'http://www.gstatic.com/generate_204',
         interval: 300
-      }
-    ],
-    rules: [
-      'DOMAIN-SUFFIX,cn,DIRECT',
-      'GEOIP,CN,DIRECT',
-      'MATCH,自动选择'
-    ]
-  };
-
-  const base64 = btoa(JSON.stringify(clashConfig));
-  const subUrl = `data:application/json;base64,${base64}`;
-
-  window.subscriptionUrl = subUrl;
-  window.currentClashConfig = clashConfig;
+      }]
+    };
+    window.currentExportContent = jsonToYaml(clashConfig);
+  } else {
+    window.currentExportContent = JSON.stringify(currentNodes, null, 2);
+  }
 }
 
-function exportClash() {
-  if (!window.currentClashConfig) {
+function exportConfig() {
+  if (!window.currentExportContent) {
     log('请先获取配置', 'error');
     return;
   }
-  const yaml = jsonToYaml(window.currentClashConfig);
-  document.getElementById('exportArea').value = yaml;
-  log('Clash配置已生成', 'success');
+  document.getElementById('exportArea').value = window.currentExportContent;
+  log(`已切换到 ${currentFormat.toUpperCase()} 格式`, 'success');
 }
 
-function exportJson() {
-  if (!window.currentClashConfig) {
+function copyConfig() {
+  if (!window.currentExportContent) {
     log('请先获取配置', 'error');
     return;
   }
-  document.getElementById('exportArea').value = JSON.stringify(window.currentClashConfig, null, 2);
-  log('JSON已生成', 'success');
-}
-
-function copySubscription() {
-  if (!window.subscriptionUrl) {
-    log('请先获取配置', 'error');
-    return;
-  }
-  navigator.clipboard.writeText(window.subscriptionUrl).then(() => {
-    log('订阅链接已复制到剪贴板', 'success');
+  navigator.clipboard.writeText(window.currentExportContent).then(() => {
+    log('配置已复制到剪贴板', 'success');
   }).catch(() => {
     log('复制失败，请手动选择复制', 'error');
-    document.getElementById('exportArea').value = window.subscriptionUrl;
+    document.getElementById('exportArea').select();
+  });
+}
+
+function copySubscriptionUrl() {
+  if (!window.currentExportContent) {
+    log('请先获取配置', 'error');
+    return;
+  }
+  const base64 = btoa(window.currentExportContent).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  const subUrl = `data:application/octet-stream;base64,${base64}`;
+
+  navigator.clipboard.writeText(subUrl).then(() => {
+    log('订阅链接已复制到剪贴板', 'success');
+  }).catch(() => {
+    log('复制失败，请手动复制', 'error');
+    document.getElementById('exportArea').value = subUrl;
   });
 }
 
@@ -358,7 +458,9 @@ function jsonToYaml(obj, indent = 0) {
     }
   } else if (typeof obj === 'object' && obj !== null) {
     for (const [key, value] of Object.entries(obj)) {
-      if (typeof value === 'object' && value !== null) {
+      if (key === 'proxy-groups') {
+        result += `${spaces}${key}:\n${jsonToYaml(value, indent + 1)}`;
+      } else if (typeof value === 'object' && value !== null) {
         result += `${spaces}${key}:\n${jsonToYaml(value, indent + 1)}`;
       } else {
         result += `${spaces}${key}: ${value}\n`;
@@ -369,12 +471,6 @@ function jsonToYaml(obj, indent = 0) {
   }
 
   return result;
-}
-
-if (window.location.protocol === 'file:') {
-  log('检测到本地文件模式', 'error');
-  log('部分浏览器可能限制fetch请求', 'error');
-  log('建议: 将此文件部署到Web服务器或使用在线编辑器', 'error');
 }
 </script>
 </body>
