@@ -76,7 +76,7 @@ function generateClashConfig(nodes) {
     server: node.server,
     port: node.port,
     tls: true,
-    skip_cert_verify: true
+    'skip-cert-verify': true
   }));
   
   const groups = [
@@ -98,6 +98,42 @@ function generateClashConfig(nodes) {
       'MATCH,自动选择'
     ]
   };
+}
+
+function jsonToYaml(obj, indent = 0) {
+  const spaces = '  '.repeat(indent);
+  let result = '';
+
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      if (typeof item === 'object' && item !== null) {
+        const nested = jsonToYaml(item, indent + 1).trim();
+        result += `${spaces}- ${nested.replace(/^  /, '')}
+`;
+      } else {
+        result += `${spaces}- ${item}
+`;
+      }
+    }
+  } else if (typeof obj === 'object' && obj !== null) {
+    for (const [key, value] of Object.entries(obj)) {
+      if (Array.isArray(value)) {
+        result += `${spaces}${key}:
+${jsonToYaml(value, indent + 1)}`;
+      } else if (typeof value === 'object' && value !== null) {
+        result += `${spaces}${key}:
+${jsonToYaml(value, indent + 1)}`;
+      } else {
+        result += `${spaces}${key}: ${value}
+`;
+      }
+    }
+  } else {
+    result += `${spaces}${obj}
+`;
+  }
+
+  return result;
 }
 
 function generateV2rayNPlain(nodes) {
@@ -144,7 +180,8 @@ async function main() {
   console.log('\n=== 生成配置文件 ===');
   
   const clashConfig = generateClashConfig(config.nodes);
-  require('fs').writeFileSync('./clash_config.yaml', JSON.stringify(clashConfig, null, 2));
+  const yamlConfig = jsonToYaml(clashConfig);
+  require('fs').writeFileSync('./clash_config.yaml', yamlConfig, 'utf8');
   console.log('✓ Clash 配置已保存到 clash_config.yaml');
   
   const plainConfig = generateV2rayNPlain(config.nodes);

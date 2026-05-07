@@ -378,7 +378,7 @@ function generateSubscription() {
         server: node.server,
         port: node.port,
         tls: true,
-        skip_cert_verify: true
+        'skip-cert-verify': true
       };
       if (node.username) proxy.username = node.username;
       if (node.password) proxy.password = node.password;
@@ -392,7 +392,12 @@ function generateSubscription() {
         proxies: proxies.map(p => p.name),
         url: 'http://www.gstatic.com/generate_204',
         interval: 300
-      }]
+      }],
+      rules: [
+        'DOMAIN-SUFFIX,cn,DIRECT',
+        'GEOIP,CN,DIRECT',
+        'MATCH,自动选择'
+      ]
     };
     window.currentExportContent = jsonToYaml(clashConfig);
   } else {
