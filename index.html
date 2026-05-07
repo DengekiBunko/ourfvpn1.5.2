@@ -503,8 +503,34 @@ function copySubscriptionUrl() {
   if (currentFormat === 'v2rayn') {
     subUrl = `https://www.githubip.xyz/subscribe?type=v2rayn&data=${base64}`;
   } else if (currentFormat === 'clash') {
-    // 对于 Clash，使用 data URL 格式的订阅链接
-    subUrl = `data:application/x-yaml;base64,${base64}`;
+    // 对于 Clash，使用 paste.rs 创建在线配置 (支持 CORS)
+    fetch('https://paste.rs/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain',
+      },
+      body: window.currentExportContent
+    })
+    .then(response => {
+      if (response.ok) {
+        return response.text();
+      } else {
+        throw new Error(`HTTP ${response.status}`);
+      }
+    })
+    .then(pasteUrl => {
+      document.getElementById('exportArea').value = pasteUrl;
+      navigator.clipboard.writeText(pasteUrl).then(() => {
+        log('Clash 订阅链接已复制到剪贴板 (paste.rs)', 'success');
+      }).catch(() => {
+        log('剪贴板复制失败，请手动选择复制', 'error');
+      });
+    })
+    .catch(error => {
+      log(`创建订阅链接失败: ${error.message}`, 'error');
+      log('请直接复制配置内容，然后保存为 .yaml 文件导入 Clash', 'error');
+    });
+    return; // 异步处理，不继续执行下面的代码
   } else {
     subUrl = `https://www.githubip.xyz/subscribe?type=json&data=${base64}`;
   }
