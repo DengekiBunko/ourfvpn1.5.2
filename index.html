@@ -497,13 +497,14 @@ function copySubscriptionUrl() {
     log('请先获取配置', 'error');
     return;
   }
-  
+
   let subUrl;
   const base64 = utf8ToBase64(window.currentExportContent).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
   if (currentFormat === 'v2rayn') {
     subUrl = `https://www.githubip.xyz/subscribe?type=v2rayn&data=${base64}`;
   } else if (currentFormat === 'clash') {
-    subUrl = `https://www.githubip.xyz/subscribe?type=clash&data=${base64}`;
+    // 对于 Clash，使用 data URL 格式的订阅链接
+    subUrl = `data:application/x-yaml;base64,${base64}`;
   } else {
     subUrl = `https://www.githubip.xyz/subscribe?type=json&data=${base64}`;
   }
