@@ -371,9 +371,9 @@ function generateSubscription() {
     });
     window.currentExportContent = vmessLinks.join('\n');
   } else if (currentFormat === 'clash') {
-    const proxies = currentNodes.map(node => {
+    const proxies = currentNodes.map((node, i) => {
       const proxy = {
-        name: node.name,
+        name: node.name || `节点-${i + 1}`,
         type: 'http',
         server: node.server,
         port: node.port,
