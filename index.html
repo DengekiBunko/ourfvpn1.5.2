@@ -438,15 +438,13 @@ function copySubscriptionUrl() {
   }
   
   let subUrl;
+  const base64 = utf8ToBase64(window.currentExportContent).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
   if (currentFormat === 'v2rayn') {
-    const base64 = utf8ToBase64(window.currentExportContent);
-    subUrl = `data:text/plain;base64,${base64}`;
+    subUrl = `https://dengekibunko.github.io/ourfvpn1.5.2/subscribe?type=v2rayn&data=${base64}`;
   } else if (currentFormat === 'clash') {
-    const base64 = utf8ToBase64(window.currentExportContent);
-    subUrl = `data:text/yaml;base64,${base64}`;
+    subUrl = `https://dengekibunko.github.io/ourfvpn1.5.2/subscribe?type=clash&data=${base64}`;
   } else {
-    const base64 = utf8ToBase64(window.currentExportContent);
-    subUrl = `data:application/json;base64,${base64}`;
+    subUrl = `https://dengekibunko.github.io/ourfvpn1.5.2/subscribe?type=json&data=${base64}`;
   }
 
   document.getElementById('exportArea').value = subUrl;
