@@ -182,6 +182,8 @@ zygLJrETnjWa1iAMPLnIB9lB
 
 const CORS_PROXIES = [
   url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.cf/raw?url=${encodeURIComponent(url)}`,
+  url => `https://thingproxy.freeboard.io/fetch/${encodeURIComponent(url)}`,
 ];
 
 let currentConfig = null;
@@ -290,8 +292,25 @@ async function fetchConfig() {
 
   try {
     log(`原始URL: ${url}`);
-    log('尝试通过CORS代理获取...');
-    const envelope = await fetchWithProxy(url);
+    let envelope = null;
+
+    try {
+      log('尝试直接获取配置...');
+      const directRes = await fetch(url, { mode: 'cors' });
+      if (directRes.ok) {
+        envelope = await directRes.json();
+        log('直接获取成功');
+      } else {
+        log(`直接获取失败: HTTP ${directRes.status}`);
+      }
+    } catch (directError) {
+      log(`直接获取失败: ${directError.message}`);
+    }
+
+    if (!envelope) {
+      log('尝试通过CORS代理获取...');
+      envelope = await fetchWithProxy(url);
+    }
     log('配置获取成功');
 
     log('开始解密...');
