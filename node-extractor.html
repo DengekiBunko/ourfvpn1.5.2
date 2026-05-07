@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FanVPN 节点提取工具</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #0a0e1a;
+  color: #e0e0e0;
+  min-height: 100vh;
+  padding: 20px;
+}
+.container { max-width: 800px; margin: 0 auto; }
+h1 { color: #00ff94; margin-bottom: 10px; font-size: 24px; }
+.subtitle { color: #888; margin-bottom: 30px; font-size: 14px; }
+.card {
+  background: #151b2e;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+  border: 1px solid #2a3555;
+}
+.card h2 { font-size: 16px; margin-bottom: 16px; color: #fff; }
+.btn {
+  background: linear-gradient(135deg, #00c853, #00ff94);
+  color: #0a0e1a;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  margin-right: 10px;
+  margin-bottom: 10px;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary { background: #2a3555; color: #fff; }
+.btn-secondary:hover:not(:disabled) { background: #3a4575; }
+.node-list { max-height: 400px; overflow-y: auto; }
+.node-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #1a2238;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  border: 1px solid #2a3555;
+}
+.node-item:hover { border-color: #00ff94; }
+.node-info { display: flex; align-items: center; gap: 12px; }
+.flag { font-size: 20px; }
+.node-name { font-weight: 500; }
+.node-server { font-size: 12px; color: #888; margin-top: 2px; }
+.node-status { font-size: 12px; padding: 4px 8px; border-radius: 4px; }
+.status-ok { background: #00ff9433; color: #00ff94; }
+.status-fail { background: #ff475733; color: #ff4757; }
+.status-pending { background: #ffb54733; color: #ffb547; }
+.log { font-family: monospace; font-size: 12px; color: #888; margin-top: 10px; white-space: pre-wrap; word-break: break-all; }
+.error { color: #ff4757; }
+.success { color: #00ff94; }
+.input-group { display: flex; gap: 10px; margin-bottom: 15px; }
+input[type="text"] {
+  flex: 1;
+  background: #1a2238;
+  border: 1px solid #2a3555;
+  padding: 12px 16px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+}
+input[type="text"]:focus { outline: none; border-color: #00ff94; }
+.export-area { margin-top: 15px; }
+textarea {
+  width: 100%;
+  height: 200px;
+  background: #1a2238;
+  border: 1px solid #2a3555;
+  border-radius: 8px;
+  color: #fff;
+  font-family: monospace;
+  font-size: 12px;
+  padding: 12px;
+  resize: vertical;
+}
+.loading { display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; vertical-align: middle; margin-right: 8px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🛡️ FanVPN 节点提取工具</h1>
+  <p class="subtitle">纯浏览器端解密，无需上传任何数据，保护隐私安全</p>
+
+  <div class="card">
+    <h2>📡 配置源</h2>
+    <div class="input-group">
+      <input type="text" id="configUrl" value="https://gitlab.com/zhifan999/fq/-/raw/main/config.json" placeholder="输入配置文件URL">
+      <button class="btn" id="fetchBtn" onclick="fetchConfig()">获取配置</button>
+    </div>
+    <div id="log" class="log"></div>
+  </div>
+
+  <div class="card">
+    <h2>📋 节点列表 <span id="nodeCount" style="color:#888;font-weight:normal"></span></h2>
+    <div id="nodeList" class="node-list"></div>
+  </div>
+
+  <div class="card">
+    <h2>📤 导出订阅</h2>
+    <button class="btn" onclick="exportClash()">导出 Clash 订阅</button>
+    <button class="btn btn-secondary" onclick="exportJson()">导出 JSON</button>
+    <button class="btn btn-secondary" onclick="copySubscription()">复制订阅链接</button>
+    <div class="export-area">
+      <textarea id="exportArea" placeholder="点击上方按钮生成配置..."></textarea>
+    </div>
+  </div>
+</div>
+
+<script>
+const PRIVATE_KEY_PEM = `-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCUHMdMJFSzOnuO
+OIRY3UZcWTXfCexZ15UOXjZB8fvgLxyvTN5gTh+Wo6SNb48ojuIw/p3fltMom3ZW
+eyeKD5QB/sL+LgWHs10GrCE73TYwsmhdXUCyZhZX7VK8meqsFBBf7SDTPcJ6lfup
+XsFstxQWV9nq2FQAQLSzUVU46KGjADKV7cEwamQ+C+0ix74EfDYvaZohfUtHEMie
+MB5xYePJnxPS1qqP4Ftsgco5/hZfscsf9lR4+LSDAj+krNRo2j6Kto030Kxrwymi
+7KbfVvlXujYsoh+LlhEXEAxHYUTbllKvcKRWvEiMNkW64+lFMclVIkHs0KjRPrOY
+0nfy0iVJAgMBAAECggEAQdrP5HOM84nv0OshMW/lbn89/Dcpz0KTJGnQXx7seqAH
+9YvMnm5uDikhq79sHED3oog7guRJbBc/lTE6AeFuUjrH0YN98vnVxXc4aakwhJN2
+4vhpIUlR6vN7I5+eH7fmFfjV7QbbV20jkgmvIBsBA/Q40Pox01Dx538k0OJiqBnr
+h+jdL99lURPYkG3/mfT3R2pG+vIP2PYydW0pi87f6AK4pxFZnAF82MuGcCM+Byr0
+ga8/pSV4wmkU+kezK4P6RfbSi4tuUszvaBWcczAgqEN3yltYwN0v/JSk2oHcBSx4
+phJV/RGGGg/IRHt4d0zi3PRfTrx2YI7AEgc1TCVSxwKBgQDMTdr6j64IMtWM45TG
+QMcwtZLDutdCpvkVBGtpzdj3DWP2ZYAWQoO1ko1T2IOKkNWIXO3PEmX2fnTvyERk
+XPQeiLf085TNnfnzKvCG8DrQwHZqdb2Wt1M2FJkYvxd14CALK2l6yHUEAyNveUoD
+VcmtOapYvCndo9d7JpmoiCzelwKBgQC5lwKqyhwLEvbKegMMSZKrL5AsdKbp/r/r
+Vovgw2wBhtmj7Gr8bnkS9nAmI3mETCFolxmbDHPK2Yt6D/+LtIcOdalI6Ox93nHx
+IV2kPQff5czWa78IiiGPeJYrp/ZBZK33egWJWPAsQsZAms0GXAQ9vSomUUBi8rUT
+Lkc03c13HwKBgQCsSqv0yd5WA6ib3ADHADH7HeTbM2H9T5qW4tdCrtnd3mkCja5r
+F0TDhwewQdMMs/+fs97I1hcuvI4Y+KbUjJ9CcMHRzOkcTbFQJFIbOdQf3279cLWl
+uIxv+wbxG5XJTm03fjDB3vLvo0Xq6DpGfb5KW2sQ0f3scBN0Q6Upv003mQKBgFPk
+oG8Fx6F15BtpBiGyzFsXuAtwe9dAsg6246opjJQwGgfQohgT9CUPQ2jqFk8oft2h
+mBCPk3Q53KPDwZesdnSh2XE84VKQkF8Y3xSUBhA+99ZhhExe7IbHUtLPLTEoSr+Y
+6BHLI15OnQGtOErMo5oo/XmutvVDk3jlLYkHTo6vAoGBAKaT2qIDOStdCrwRbvD1
+SF/pcEytM0rQhiJYmBXKeayUsICTxnSdixb42BSRDTL14F6Jzv2GcGRh80Jx1DVL
+6Dmv27MEXx3OnCiHmTCHi3CxqKXhOvJGQCbtLLjluP6pAvQCZ7s3KB6/zS4v/fIv
+zygLJrETnjWa1iAMPLnIB9lB
+-----END PRIVATE KEY-----`;
+
+let currentConfig = null;
+let currentNodes = [];
+
+function log(msg, type = '') {
+  const logEl = document.getElementById('log');
+  const prefix = type === 'error' ? '❌ ' : type === 'success' ? '✅ ' : 'ℹ️  ';
+  logEl.textContent += prefix + msg + '\n';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function pemToBuffer(pem) {
+  const clean = pem.replace(/-----[^-]+-----/g, '').replace(/\s/g, '');
+  return Uint8Array.from(atob(clean), c => c.charCodeAt(0));
+}
+
+async function importPrivateKey(pem) {
+  const keyData = pemToBuffer(pem);
+  return crypto.subtle.importKey(
+    'pkcs8',
+    keyData.buffer,
+    { name: 'RSA-OAEP', hash: 'SHA-1' },
+    false,
+    ['decrypt']
+  );
+}
+
+async function decryptAesKey(privateKey, encryptedKeyB64) {
+  const encryptedKey = Uint8Array.from(atob(encryptedKeyB64), c => c.charCodeAt(0));
+  const keyBuffer = await crypto.subtle.decrypt(
+    { name: 'RSA-OAEP' },
+    privateKey,
+    encryptedKey
+  );
+  return crypto.subtle.importKey('raw', keyBuffer, { name: 'AES-CBC' }, false, ['decrypt']);
+}
+
+async function decryptData(aesKey, ivB64, encryptedDataB64) {
+  const iv = Uint8Array.from(atob(ivB64), c => c.charCodeAt(0));
+  const encryptedData = Uint8Array.from(atob(encryptedDataB64), c => c.charCodeAt(0));
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-CBC', iv },
+    aesKey,
+    encryptedData
+  );
+  return new TextDecoder().decode(decrypted);
+}
+
+async function decryptConfig(envelope) {
+  log('正在导入私钥...');
+  const privateKey = await importPrivateKey(PRIVATE_KEY_PEM);
+  log('私钥导入成功');
+
+  log('正在解密AES密钥...');
+  const aesKey = await decryptAesKey(privateKey, envelope.key);
+  log('AES密钥解密成功');
+
+  log('正在解密配置数据...');
+  const jsonStr = await decryptData(aesKey, envelope.iv, envelope.data);
+  log('配置解密成功');
+  return JSON.parse(jsonStr);
+}
+
+async function fetchConfig() {
+  const url = document.getElementById('configUrl').value.trim();
+  const btn = document.getElementById('fetchBtn');
+  const logEl = document.getElementById('log');
+  logEl.textContent = '';
+
+  if (!url) {
+    log('请输入配置文件URL', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading"></span>获取中...';
+
+  try {
+    log(`从 ${url} 获取配置...`);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const envelope = await res.json();
+    log('配置获取成功');
+
+    log('开始解密...');
+    currentConfig = await decryptConfig(envelope);
+    currentNodes = currentConfig.nodes || [];
+
+    log(`解密成功！共 ${currentNodes.length} 个节点`, 'success');
+    renderNodes();
+    generateSubscription();
+  } catch (e) {
+    log(`获取失败: ${e.message}`, 'error');
+    log('可能原因: CORS跨域限制 或 网络问题', 'error');
+    log('提示: 可尝试使用浏览器扩展如 "CORS Unlock" 或 "Allow CORS"', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '获取配置';
+  }
+}
+
+function renderNodes() {
+  const listEl = document.getElementById('nodeList');
+  const countEl = document.getElementById('nodeCount');
+
+  countEl.textContent = `(${currentNodes.length} 个)`;
+
+  if (currentNodes.length === 0) {
+    listEl.innerHTML = '<div class="node-item"><span class="node-status status-fail">暂无节点</span></div>';
+    return;
+  }
+
+  listEl.innerHTML = currentNodes.map((node, i) => `
+    <div class="node-item">
+      <div class="node-info">
+        <span class="flag">${node.flag || '🌐'}</span>
+        <div>
+          <div class="node-name">${node.name || '节点 ' + (i + 1)}</div>
+          <div class="node-server">${node.server}:${node.port}</div>
+        </div>
+      </div>
+      <span class="node-status status-pending">HTTPS</span>
+    </div>
+  `).join('');
+}
+
+function generateSubscription() {
+  if (!currentNodes.length) return;
+
+  const proxies = currentNodes.map(node => ({
+    name: node.name || `节点-${node.server}`,
+    type: 'https',
+    server: node.server,
+    port: node.port,
+    tls: true,
+    skip_cert_verify: true
+  }));
+
+  const clashConfig = {
+    proxies,
+    'proxy-groups': [
+      {
+        name: '自动选择',
+        type: 'url-test',
+        proxies: proxies.map(p => p.name),
+        url: 'http://www.gstatic.com/generate_204',
+        interval: 300
+      }
+    ],
+    rules: [
+      'DOMAIN-SUFFIX,cn,DIRECT',
+      'GEOIP,CN,DIRECT',
+      'MATCH,自动选择'
+    ]
+  };
+
+  const base64 = btoa(JSON.stringify(clashConfig));
+  const subUrl = `data:application/json;base64,${base64}`;
+
+  window.subscriptionUrl = subUrl;
+  window.currentClashConfig = clashConfig;
+}
+
+function exportClash() {
+  if (!window.currentClashConfig) {
+    log('请先获取配置', 'error');
+    return;
+  }
+  const yaml = jsonToYaml(window.currentClashConfig);
+  document.getElementById('exportArea').value = yaml;
+  log('Clash配置已生成', 'success');
+}
+
+function exportJson() {
+  if (!window.currentClashConfig) {
+    log('请先获取配置', 'error');
+    return;
+  }
+  document.getElementById('exportArea').value = JSON.stringify(window.currentClashConfig, null, 2);
+  log('JSON已生成', 'success');
+}
+
+function copySubscription() {
+  if (!window.subscriptionUrl) {
+    log('请先获取配置', 'error');
+    return;
+  }
+  navigator.clipboard.writeText(window.subscriptionUrl).then(() => {
+    log('订阅链接已复制到剪贴板', 'success');
+  }).catch(() => {
+    log('复制失败，请手动选择复制', 'error');
+    document.getElementById('exportArea').value = window.subscriptionUrl;
+  });
+}
+
+function jsonToYaml(obj, indent = 0) {
+  const spaces = '  '.repeat(indent);
+  let result = '';
+
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      if (typeof item === 'object' && item !== null) {
+        result += `${spaces}- ${jsonToYaml(item, indent + 1).trim().slice(2)}\n`;
+      } else {
+        result += `${spaces}- ${item}\n`;
+      }
+    }
+  } else if (typeof obj === 'object' && obj !== null) {
+    for (const [key, value] of Object.entries(obj)) {
+      if (typeof value === 'object' && value !== null) {
+        result += `${spaces}${key}:\n${jsonToYaml(value, indent + 1)}`;
+      } else {
+        result += `${spaces}${key}: ${value}\n`;
+      }
+    }
+  } else {
+    result += `${spaces}${obj}\n`;
+  }
+
+  return result;
+}
+
+if (window.location.protocol === 'file:') {
+  log('检测到本地文件模式', 'error');
+  log('部分浏览器可能限制fetch请求', 'error');
+  log('建议: 将此文件部署到Web服务器或使用在线编辑器', 'error');
+}
+</script>
+</body>
+</html>
