@@ -428,7 +428,13 @@ function copyConfig() {
 }
 
 function utf8ToBase64(str) {
-  return btoa(unescape(encodeURIComponent(str)));
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  let binary = '';
+  for (let i = 0; i < data.length; i++) {
+    binary += String.fromCharCode(data[i]);
+  }
+  return btoa(binary);
 }
 
 function copySubscriptionUrl() {
@@ -440,20 +446,21 @@ function copySubscriptionUrl() {
   let subUrl;
   if (currentFormat === 'v2rayn') {
     const base64 = utf8ToBase64(window.currentExportContent);
-    subUrl = `data:text/plain;base64,${base64}`;
+    subUrl = base64;
   } else if (currentFormat === 'clash') {
     const base64 = utf8ToBase64(window.currentExportContent);
-    subUrl = `data:text/yaml;base64,${base64}`;
+    subUrl = base64;
   } else {
     const base64 = utf8ToBase64(window.currentExportContent);
-    subUrl = `data:application/json;base64,${base64}`;
+    subUrl = base64;
   }
+
+  document.getElementById('exportArea').value = subUrl;
 
   navigator.clipboard.writeText(subUrl).then(() => {
     log('订阅链接已复制到剪贴板', 'success');
   }).catch(() => {
-    log('复制失败，请手动复制', 'error');
-    document.getElementById('exportArea').value = subUrl;
+    log('剪贴板复制失败，请手动选择复制', 'error');
   });
 }
 
