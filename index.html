@@ -363,32 +363,26 @@ function generateSubscription() {
 
   if (currentFormat === 'v2rayn') {
     const vmessLinks = currentNodes.map((node, i) => {
-      const obj = {
-        v: '2',
-        ps: node.name || `节点-${i + 1}`,
-        add: node.server,
-        port: node.port,
-        id: '00000000-0000-0000-0000-000000000000',
-        aid: '0',
-        net: 'http',
-        type: 'none',
-        host: '',
-        path: '',
-        tls: 'tls'
-      };
-      const jsonStr = JSON.stringify(obj);
-      const base64 = utf8ToBase64(jsonStr).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-      return `vmess://${base64}`;
+      const name = node.name || `节点-${i + 1}`;
+      const userinfo = node.username && node.password 
+        ? `${encodeURIComponent(node.username)}:${encodeURIComponent(node.password)}@` 
+        : '';
+      return `${name}=http://${userinfo}${node.server}:${node.port}`;
     });
     window.currentExportContent = vmessLinks.join('\n');
   } else if (currentFormat === 'clash') {
-    const proxies = currentNodes.map(node => ({
-      name: node.name,
-      type: 'http',
-      server: node.server,
-      port: node.port,
-      tls: false
-    }));
+    const proxies = currentNodes.map(node => {
+      const proxy = {
+        name: node.name,
+        type: 'http',
+        server: node.server,
+        port: node.port,
+        tls: false
+      };
+      if (node.username) proxy.username = node.username;
+      if (node.password) proxy.password = node.password;
+      return proxy;
+    });
     const clashConfig = {
       proxies,
       'proxy-groups': [{
@@ -446,13 +440,13 @@ function copySubscriptionUrl() {
   let subUrl;
   if (currentFormat === 'v2rayn') {
     const base64 = utf8ToBase64(window.currentExportContent);
-    subUrl = base64;
+    subUrl = `data:text/plain;base64,${base64}`;
   } else if (currentFormat === 'clash') {
     const base64 = utf8ToBase64(window.currentExportContent);
-    subUrl = base64;
+    subUrl = `data:text/yaml;base64,${base64}`;
   } else {
     const base64 = utf8ToBase64(window.currentExportContent);
-    subUrl = base64;
+    subUrl = `data:application/json;base64,${base64}`;
   }
 
   document.getElementById('exportArea').value = subUrl;
