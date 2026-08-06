@@ -106,8 +106,8 @@ textarea {
   <div class="card">
     <h2>📡 配置源</h2>
     <div class="input-group">
-      <input type="text" id="configUrl" value="https://github.com/DengekiBunko/ourfvpn1.5.2/config.json" placeholder="输入配置文件URL">
-      <button class="btn" id="fetchBtn" onclick="fetchConfig()">获取配置</button>
+      <input type="text" id="configUrl" value="./config.json" placeholder="输入配置文件URL，默认会优先读取项目内 config.json">
+      <button class="btn" id="fetchBtn" onclick="fetchConfig()">拉取最新节点</button>
     </div>
     <div id="log" class="log"></div>
     <div class="tip">
@@ -180,10 +180,9 @@ SF/pcEytM0rQhiJYmBXKeayUsICTxnSdixb42BSRDTL14F6Jzv2GcGRh80Jx1DVL
 zygLJrETnjWa1iAMPLnIB9lB
 -----END PRIVATE KEY-----`;
 
-const CORS_PROXIES = [
-  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  url => `https://api.allorigins.cf/raw?url=${encodeURIComponent(url)}`,
-  url => `https://thingproxy.freeboard.io/fetch/${encodeURIComponent(url)}`,
+const DEFAULT_CONFIG_URLS = [
+  './config.json',
+  'https://dengekibunko.github.io/ourfvpn1.5.2/config.json'
 ];
 
 let currentConfig = null;
@@ -235,8 +234,15 @@ async function decryptData(aesKey, ivB64, encryptedDataB64) {
 }
 
 function normalizeConfigUrl(url) {
+  const trimmed = (url || '').trim();
+  if (!trimmed) return '';
+
+  if (trimmed.startsWith('./') || trimmed.startsWith('/')) {
+    return trimmed;
+  }
+
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(trimmed);
     if (parsed.hostname === 'github.com') {
       const parts = parsed.pathname.replace(/^\//, '').split('/');
       if (parts.length >= 3) {
@@ -245,13 +251,11 @@ function normalizeConfigUrl(url) {
         let branch = 'main';
         let filePath = parts.slice(2).join('/');
 
-        // 支持 github.com/user/repo/blob/branch/path/to/file
         if (parts[2] === 'blob' && parts.length >= 5) {
           branch = parts[3];
           filePath = parts.slice(4).join('/');
         }
 
-        // 支持 github.com/user/repo/config.json 这种简化链接
         if (parts.length === 3) {
           filePath = parts[2];
         }
@@ -262,7 +266,27 @@ function normalizeConfigUrl(url) {
   } catch (e) {
     // ignore invalid URL
   }
-  return url;
+
+  return trimmed;
+}
+
+function buildRequestUrl(url) {
+  try {
+    const parsed = new URL(url, window.location.href);
+    parsed.searchParams.set('_', Date.now().toString());
+    return parsed.toString();
+  } catch (e) {
+    return `${url}?_=${Date.now()}`;
+  }
+}
+
+function isSameOrigin(url) {
+  try {
+    const target = new URL(url, window.location.href);
+    return target.origin === window.location.origin;
+  } catch (e) {
+    return false;
+  }
 }
 
 async function decryptConfig(envelope) {
@@ -280,75 +304,56 @@ async function decryptConfig(envelope) {
   return JSON.parse(jsonStr);
 }
 
-async function fetchWithProxy(url, proxyIndex = 0) {
-  if (proxyIndex >= CORS_PROXIES.length) {
-    throw new Error('所有CORS代理都失败了');
-  }
-
-  const proxyUrl = CORS_PROXIES[proxyIndex](url);
-  log(`尝试CORS代理 ${proxyIndex + 1}/${CORS_PROXIES.length}...`);
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
-
-  try {
-    const res = await fetch(proxyUrl, {
-      signal: controller.signal,
-      mode: 'cors'
-    });
-    clearTimeout(timeout);
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
-  } catch (e) {
-    clearTimeout(timeout);
-    log(`代理 ${proxyIndex + 1} 失败: ${e.message}`);
-    return fetchWithProxy(url, proxyIndex + 1);
-  }
-}
-
 async function fetchConfig() {
-  const url = document.getElementById('configUrl').value.trim();
+  const inputUrl = document.getElementById('configUrl').value.trim();
   const btn = document.getElementById('fetchBtn');
   const logEl = document.getElementById('log');
   logEl.textContent = '';
 
-  if (!url) {
+  const candidateUrls = inputUrl ? [inputUrl] : DEFAULT_CONFIG_URLS;
+  const targets = candidateUrls.map(url => normalizeConfigUrl(url)).filter(Boolean);
+
+  if (!targets.length) {
     log('请输入配置文件URL', 'error');
     return;
   }
 
   btn.disabled = true;
-  btn.innerHTML = '<span class="loading"></span>获取中...';
+  btn.innerHTML = '<span class="loading"></span>正在拉取...';
+
+  let envelope = null;
+  let lastError = null;
 
   try {
-    log(`原始URL: ${url}`);
-    const normalizedUrl = normalizeConfigUrl(url);
-    if (normalizedUrl !== url) {
-      log(`已解析为 GitHub 原始文件 URL: ${normalizedUrl}`);
-    }
-
-    let envelope = null;
-
-    try {
-      log('尝试直接获取配置...');
-      const directRes = await fetch(normalizedUrl, { mode: 'cors' });
-      if (directRes.ok) {
-        envelope = await directRes.json();
-        log('直接获取成功');
-      } else {
-        log(`直接获取失败: HTTP ${directRes.status}`);
+    for (const targetUrl of targets) {
+      log(`正在尝试: ${targetUrl}`);
+      if (!isSameOrigin(targetUrl)) {
+        log('当前浏览器不允许跨域读取配置，请使用同源页面或本地静态服务打开。');
+        lastError = new Error('跨域读取被浏览器阻止');
+        continue;
       }
-    } catch (directError) {
-      log(`直接获取失败: ${directError.message}`);
+
+      try {
+        const directRes = await fetch(buildRequestUrl(targetUrl), {
+          cache: 'no-store'
+        });
+        if (directRes.ok) {
+          envelope = await directRes.json();
+          log('直接获取成功', 'success');
+          break;
+        }
+        log(`直接获取失败: HTTP ${directRes.status}`);
+      } catch (directError) {
+        log(`直接获取失败: ${directError.message}`);
+        lastError = directError;
+      }
     }
 
     if (!envelope) {
-      log('尝试通过CORS代理获取...');
-      envelope = await fetchWithProxy(normalizedUrl);
+      throw lastError || new Error('无法获取配置');
     }
-    log('配置获取成功');
 
+    log('配置获取成功');
     log('开始解密...');
     currentConfig = await decryptConfig(envelope);
     currentNodes = currentConfig.nodes || [];
@@ -359,14 +364,10 @@ async function fetchConfig() {
     exportConfig();
   } catch (e) {
     log(`获取失败: ${e.message}`, 'error');
-    log('', 'error');
-    log('请尝试以下方法:', 'error');
-    log('1. 安装浏览器扩展 "CORS Unlock"', 'error');
-    log('2. 或使用在线编辑器如 CodePen/JSFiddle', 'error');
-    log('3. 或在本地搭建简单HTTP服务器', 'error');
+    log('如果仍然失败，请确认页面是通过 http://localhost 或 GitHub Pages 之类的同源服务打开。', 'error');
   } finally {
     btn.disabled = false;
-    btn.textContent = '获取配置';
+    btn.textContent = '拉取最新节点';
   }
 }
 
