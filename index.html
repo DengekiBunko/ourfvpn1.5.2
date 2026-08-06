@@ -588,6 +588,14 @@ function jsonToYaml(obj, indent = 0) {
 
   return result;
 }
+
+window.addEventListener('load', () => {
+  const input = document.getElementById('configUrl');
+  if (input && !input.value.trim()) {
+    input.value = './config.json';
+  }
+  fetchConfig();
+});
 </script>
 </body>
 </html>
