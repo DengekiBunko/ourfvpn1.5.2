@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "FanVPN",
-  "version": "1.5.2",
-  "description": "安全访问全球网络",
+  "version": "1.6.3",
+  "description": "免费 Chrome 翻墙插件,一键连接,无需注册,7 国 18+ 节点,智能分流,无 DNS 泄露,科学上网必备",
   "permissions": [
     "proxy",
     "storage"

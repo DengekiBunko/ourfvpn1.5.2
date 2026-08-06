@@ -375,6 +375,21 @@
       letter-spacing: 0.4px;
       font-family: 'JetBrains Mono', monospace;
       text-transform: uppercase;
+      cursor: pointer;
+      user-select: none;
+      transition: all .18s ease;
+    }
+    .chip:hover {
+      color: var(--text-secondary);
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+    .chip.active {
+      color: var(--green);
+      border-color: rgba(0, 255, 148, 0.35);
+      background: rgba(0, 255, 148, 0.06);
+    }
+    .chip.active:hover {
+      background: rgba(0, 255, 148, 0.10);
     }
     .footer-link {
       font-family: 'JetBrains Mono', monospace;
@@ -489,32 +504,6 @@
       font-weight: 600;
       letter-spacing: 0.2px;
     }
-    .item-detail {
-      font-size: 10px;
-      color: var(--text-secondary);
-      margin-top: 4px;
-      line-height: 1.4;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 180px;
-    }
-
-    .copy-btn {
-      font-size: 11px;
-      padding: 6px 10px;
-      border: 1px solid rgba(0, 229, 255, 0.2);
-      background: rgba(0, 229, 255, 0.06);
-      color: var(--neon);
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.2s;
-      white-space: nowrap;
-    }
-    .copy-btn:hover {
-      background: rgba(0, 229, 255, 0.14);
-      border-color: rgba(0, 229, 255, 0.35);
-    }
 
     .item-right {
       display: flex;
@@ -528,7 +517,6 @@
       border-radius: 50%;
     }
     .si-ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
-    .si-slow { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
     .si-fail { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
     .si-checking {
       background: var(--neon);
@@ -627,8 +615,8 @@
   </div>
 
   <div class="footer">
-    <span class="chip">智能分流</span>
-    <a href="https://fanvpn.net" target="_blank" rel="noopener noreferrer" class="footer-link">fanvpn.net</a>
+    <span class="chip" id="modeChip" title="点击切换分流模式">智能分流</span>
+    <a href="https://fanvpn.net" target="_blank" rel="noopener noreferrer" class="footer-link">官网:fanvpn.net</a>
   </div>
 </div>
 
