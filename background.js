@@ -29,13 +29,15 @@ zygLJrETnjWa1iAMPLnIB9lB
 
 const CONFIG_URLS = [
   'https://gitlab.com/zhifan999/fq/-/raw/main/config.json',
-  'https://www.githubip.xyz/config.json'
+  'https://www.githubip.xyz/config.json',
+  'https://d23lye95wfkvbk.cloudfront.net/config.json'
 ];
 
 // [v1.5.2] 通知文件地址(明文 JSON,不加密)
 const NOTICE_URLS = [
   'https://gitlab.com/zhifan999/fq/-/raw/main/notice.json',
-  'https://www.githubip.xyz/notice.json'
+  'https://www.githubip.xyz/notice.json',
+  'https://d23lye95wfkvbk.cloudfront.net/notice.json'
 ];
 
 const CACHE_TTL  = 5 * 60 * 1000;
@@ -58,14 +60,17 @@ async function fetchNotice() {
     try {
       const res = await fetch(url, {
         cache: 'no-store',
-        signal: AbortSignal.timeout(5000)
+        signal: AbortSignal.timeout(3000)
       });
       if (res.ok) {
         cachedNotice = await res.json();
         noticeCacheTime = Date.now();
         return cachedNotice;
+      } else {
+        console.warn(`[fanvpn] notice source returned ${res.status}: ${url}`);
       }
-    } catch {
+    } catch (e) {
+      console.warn(`[fanvpn] notice source failed: ${url}`, e.message);
       continue;
     }
   }
@@ -83,13 +88,16 @@ async function fetchAndDecryptConfig() {
     try {
       const res = await fetch(url, {
         cache: 'no-store',
-        signal: AbortSignal.timeout(5000)
+        signal: AbortSignal.timeout(3000)
       });
       if (res.ok) {
         envelope = await res.json();
         break;
+      } else {
+        console.warn(`[fanvpn] config source returned ${res.status}: ${url}`);
       }
-    } catch {
+    } catch (e) {
+      console.warn(`[fanvpn] config source failed: ${url}`, e.message);
       continue;
     }
   }
@@ -136,7 +144,7 @@ async function testNode(node) {
       signal: AbortSignal.timeout(5000)
     });
     const ms = Date.now() - start;
-    return { status: ms < 800 ? 'ok' : 'slow', ms };
+    return { status: 'ok', ms };
   } catch {
     return { status: 'fail', ms: 0 };
   }
@@ -159,7 +167,7 @@ async function setProxy(server, port) {
   const global = data.globalMode === true;
   return new Promise((resolve, reject) => {
     chrome.proxy.settings.set({
-      value: { mode: 'pac_script', pacScript: { data: buildPacScript(server, port, global) } },
+      value: buildProxyConfig(server, port, global),
       scope: 'regular'
     }, () => {
       if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
@@ -240,30 +248,85 @@ function disconnect() {
   updateIcon(false);
 }
 
-function buildPacScript(server, port, global) {
-  if (global) {
-    return 'function FindProxyForURL(url,host){' +
-      'if(isPlainHostName(host)||shExpMatch(host,"*.local")||' +
-      'isInNet(host,"127.0.0.0","255.0.0.0")||' +
-      'isInNet(host,"192.168.0.0","255.255.0.0")||' +
-      'isInNet(host,"10.0.0.0","255.0.0.0"))return "DIRECT";' +
-      'return "HTTPS ' + server + ':' + port + '";}';
-  }
-  return 'function FindProxyForURL(url,host){' +
-    'if(isPlainHostName(host)||shExpMatch(host,"*.local")||' +
-    'isInNet(host,"127.0.0.0","255.0.0.0")||' +
-    'isInNet(host,"192.168.0.0","255.255.0.0")||' +
-    'isInNet(host,"10.0.0.0","255.0.0.0"))return "DIRECT";' +
-    'var d=[".cn",".baidu.com",".qq.com",".weixin.qq.com",' +
-    '".taobao.com",".tmall.com",".jd.com",".alipay.com",' +
-    '".aliyun.com",".tencent.com",".163.com",".126.com",' +
-    '".sina.com.cn",".weibo.com",".bilibili.com",".iqiyi.com",' +
-    '".youku.com",".meituan.com",".dianping.com",".ctrip.com",' +
-    '".zhihu.com",".douban.com",".xiaohongshu.com",".toutiao.com",' +
-    '".bytedance.com",".douyin.com",".kuaishou.com"];' +
-    'for(var i=0;i<d.length;i++){' +
-    'if(dnsDomainIs(host,d[i])||host===d[i].replace(/^\\./, ""))return "DIRECT";}' +
-    'return "HTTPS ' + server + ':' + port + '";}';
+// [v1.6.0] 国内白名单(bypassList 格式)
+// 使用 fixed_servers + bypassList 模式,彻底解决 DNS 泄露,同时保留智能分流
+// Chrome 文档: leading "." 等价于 "*.",表示匹配该后缀下所有子域名
+const CN_BYPASS_LIST = [
+  // 本地/内网(不可少)
+  '<local>',
+  '127.0.0.1', '192.168.0.0/16', '10.0.0.0/8', '172.16.0.0/12',
+  '*.local',
+
+  // 顶级域(精准后缀匹配,Chrome 把 leading "." 解释为 "*.")
+  '.cn', '.gov.cn', '.edu.cn', '.org.cn', '.com.cn', '.net.cn',
+
+  // 搜索/门户
+  '.baidu.com', '.sogou.com', '.so.com', '.360.cn', '.so.com',
+  '.sina.com.cn', '.sohu.com', '.163.com', '.126.com', '.qq.com',
+
+  // 电商/支付
+  '.taobao.com', '.tmall.com', '.alipay.com', '.aliyun.com',
+  '.jd.com', '.jdcloud.com', '.alicdn.com',
+  '.pinduoduo.com', '.yangkeduo.com',
+  '.suning.com', '.meituan.com', '.dianping.com',
+  '.ele.me', '.koubei.com',
+
+  // 社交/通讯
+  '.weixin.qq.com', '.wechat.com', '.weibo.com', '.weibo.cn',
+  '.zhihu.com', '.zhihu.cn', '.douban.com',
+  '.xiaohongshu.com', '.xhslink.com',
+
+  // 视频/直播/音乐
+  '.bilibili.com', '.bilivideo.com', '.hdslb.com',
+  '.iqiyi.com', '.qiyi.com', '.iqiyipic.com',
+  '.youku.com', '.ykimg.com',
+  '.douyin.com', '.bytedance.com', '.toutiao.com',
+  '.kuaishou.com', '.kwimgs.com',
+  '.huya.com', '.douyu.com',
+  '.qqmusic.com', '.kugou.com', '.kuwo.cn',
+
+  // 出行/生活
+  '.ctrip.com', '.elong.com', '.qunar.com', '.tuniu.com',
+  '.fliggy.com', '.feizhu.com',
+  '.amap.com', '.autonavi.com', '.bdimg.com',
+  '.12306.cn', '.sf-express.com', '.kuaidi100.com',
+
+  // 厂商/设备
+  '.huawei.com', '.huaweicloud.com', '.hicloud.com',
+  '.xiaomi.com', '.mi.com', '.miui.com',
+  '.oppo.com', '.vivo.com', '.lenovo.com',
+
+  // 开发者/技术
+  '.csdn.net', '.cnblogs.com', '.jianshu.com',
+  '.juejin.cn', '.gitee.com', '.oschina.net',
+  '.aliyuncs.com', '.tencent-cloud.net', '.myqcloud.com',
+  '.qcloudcdn.com', '.qpic.cn',
+
+  // 媒体/资讯
+  '.thepaper.cn', '.cctv.com', '.cnn.com.cn',
+  '.smzdm.com', '.hupu.com', '.acfun.cn',
+
+  // CDN/常用
+  '.tencent.com', '.alibaba.com', '.taobaocdn.com',
+  '.aliyuncdn.com', '.aliyun-inc.com'
+];
+
+// [v1.6.0] 构建 chrome.proxy 配置对象
+// 用 fixed_servers + bypassList 模式,彻底消除 DNS 泄露
+function buildProxyConfig(server, port, global) {
+  return {
+    mode: 'fixed_servers',
+    rules: {
+      singleProxy: {
+        scheme: 'https',
+        host: server,
+        port: port
+      },
+      // global=true: 清空白名单,所有流量(包括国内)走代理
+      // global=false: 应用国内白名单,智能分流
+      bypassList: global ? ['<local>'] : CN_BYPASS_LIST
+    }
+  };
 }
 
 function updateIcon(connected) {
@@ -282,7 +345,8 @@ function updateIcon(connected) {
 function restoreState() {
   // [v1.5.1] Service Worker 启动时,从 storage 和 proxy settings 恢复状态
   chrome.proxy.settings.get({ incognito: false }, (cfg) => {
-    const proxyActive = cfg.value.mode === 'pac_script';
+    // [v1.6.0] 改用 fixed_servers 模式,判断条件相应更新
+    const proxyActive = cfg.value.mode === 'fixed_servers';
     if (proxyActive) {
       // 代理仍激活,尝试从 storage 恢复 activeNode
       chrome.storage.local.get(['activeNodeData'], (data) => {
@@ -317,7 +381,8 @@ chrome.runtime.onStartup.addListener(() => {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'getStatus') {
     chrome.proxy.settings.get({ incognito: false }, (cfg) => {
-      const proxyActive = cfg.value.mode === 'pac_script';
+      // [v1.6.0] 改用 fixed_servers 模式,判断条件相应更新
+      const proxyActive = cfg.value.mode === 'fixed_servers';
       if (proxyActive !== isConnected) { isConnected = proxyActive; updateIcon(proxyActive); }
       // [v1.5.1] 如果内存中 activeNode 已丢失但代理仍激活,从 storage 恢复
       if (proxyActive && !activeNode) {
@@ -333,7 +398,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     return true;
   } else if (msg.action === 'getNodes') {
-    fetchAndDecryptConfig().then(cfg => sendResponse({ nodes: cfg.nodes }));
+    fetchAndDecryptConfig()
+      .then(cfg => sendResponse({ nodes: cfg.nodes }))
+      .catch(e => {
+        console.warn('[fanvpn] getNodes failed:', e.message);
+        sendResponse({ nodes: [] });   // [v1.5.3] 失败时返回空数组,popup 才能进入失败提示逻辑
+      });
     return true;
   } else if (msg.action === 'getNotice') {
     // [v1.5.2] 拉取通知,失败返回 null

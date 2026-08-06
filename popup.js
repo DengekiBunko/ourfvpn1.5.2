@@ -19,6 +19,7 @@ const checkPath = document.getElementById('checkPath');
 const backBtn   = document.getElementById('backBtn');
 const refreshBtn= document.getElementById('refreshBtn');
 const nodeList  = document.getElementById('nodeList');
+const modeChip  = document.getElementById('modeChip');
 
 // [v1.5.2] 通知相关 DOM
 const noticeBar   = document.getElementById('noticeBar');
@@ -161,15 +162,22 @@ chrome.runtime.sendMessage({ action: 'getStatus' }, (res) => {
 
           if (nodes.length === 0) {
             retryCount++;
-            nodeFlag.textContent = '?';
-            nodeName.textContent = retryCount < 3 ? '获取节点中…' : '暂无法获取节点';
-            if (retryCount < 3) {
+            if (retryCount === 1) {
+              // 第一次失败:还在尝试,显示"获取节点中"
+              nodeFlag.textContent = '?';
+              nodeName.textContent = '获取节点中…';
               setTimeout(updateNodeDisplay, 5000);
+            } else {
+              // 第二次仍失败:给用户可执行的引导
+              nodeFlag.textContent = '!';
+              nodeName.textContent = '请访问 fanvpn.net';
+              window.nodeLoadFailed = true;  // [v1.5.3] 标记错误状态,nodeCard 点击改为打开官网
             }
             return;
           }
 
           retryCount = 0;
+          window.nodeLoadFailed = false;
 
           if (!data.lastNode) {
             const first = nodes[0];
@@ -207,6 +215,11 @@ connectBtn.addEventListener('click', () => {
 });
 
 nodeCard.addEventListener('click', () => {
+  // [v1.5.3] 节点加载失败时,点击卡片改为打开官网(给用户可执行操作)
+  if (window.nodeLoadFailed) {
+    chrome.tabs.create({ url: 'https://fanvpn.net' });
+    return;
+  }
   showNodePage();
 });
 
@@ -219,20 +232,6 @@ function showNodePage() {
 function hideNodePage() {
   nodePage.style.display = 'none';
   mainPage.style.display = 'block';
-}
-
-function getNodeConfigText(node) {
-  const name = node.name || `${node.server}:${node.port}`;
-  return `${name} = https,${node.server},${node.port}`;
-}
-
-function copyNodeConfig(node) {
-  const copyText = getNodeConfigText(node);
-  navigator.clipboard.writeText(copyText).then(() => {
-    alert(`已复制配置:\n${copyText}`);
-  }).catch(() => {
-    alert('复制失败，请手动复制节点信息。');
-  });
 }
 
 backBtn.addEventListener('click', hideNodePage);
@@ -262,23 +261,19 @@ function renderNodeList(nodes) {
       item.className = 'node-item' + (node.status === 'fail' ? ' disabled' : '');
 
       const siClass = node.status === 'ok'       ? 'si si-ok' :
-                      node.status === 'slow'     ? 'si si-slow' :
                       node.status === 'fail'     ? 'si si-fail' :
                       node.status === 'checking' ? 'si si-checking' : '';
 
-      const statusLabel = node.status === 'ok'       ? '正常' :
-                          node.status === 'slow'     ? '较慢' :
+      const statusLabel = node.status === 'ok'       ? '可用' :
                           node.status === 'fail'     ? '不可用' :
                           node.status === 'checking' ? '检测中…' : '';
 
       // [v2] 状态颜色对齐深色主题
       const statusColor = node.status === 'ok'   ? '#00FF94' :
-                          node.status === 'slow' ? '#FFB547' :
                           node.status === 'fail' ? '#FF4757' : '#5A6B85';
 
       const isActive = node.server === activeServer;
       const flagActive = isActive ? ' active' : '';
-      const detailText = node.server && node.port ? `${node.server}:${node.port}` : '未提供节点地址';
 
       item.innerHTML = `
         <div class="item-left">
@@ -286,23 +281,13 @@ function renderNodeList(nodes) {
           <div>
             <div class="item-name">${node.name}</div>
             ${siClass ? `<div class="item-status" style="color:${statusColor}">${statusLabel}</div>` : ''}
-            <div class="item-detail">${detailText}</div>
           </div>
         </div>
         <div class="item-right">
           ${siClass ? `<span class="${siClass}"></span>` : ''}
-          <button class="copy-btn" title="复制该节点的 V2RayN/Clash HTTPS 代理配置">复制配置</button>
           ${isActive ? '<div class="check-on"></div>' : '<div class="check-off"></div>'}
         </div>
       `;
-
-      const copyBtn = item.querySelector('.copy-btn');
-      if (copyBtn) {
-        copyBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          copyNodeConfig(node);
-        });
-      }
 
       if (node.status !== 'fail') {
         item.addEventListener('click', () => {
@@ -311,6 +296,40 @@ function renderNodeList(nodes) {
         });
       }
       nodeList.appendChild(item);
+    });
+  });
+}
+
+// ════════════ [v1.6.3] 智能分流 / 全局模式 切换 ════════════
+function refreshModeChip() {
+  chrome.storage.local.get(['globalMode'], (data) => {
+    const isGlobal = data.globalMode === true;
+    if (isGlobal) {
+      modeChip.textContent = '全局模式';
+      modeChip.classList.add('active');
+      modeChip.title = '点击切换为智能分流';
+    } else {
+      modeChip.textContent = '智能分流';
+      modeChip.classList.remove('active');
+      modeChip.title = '点击切换为全局模式';
+    }
+  });
+}
+
+if (modeChip) {
+  // 初始化显示
+  refreshModeChip();
+
+  // 点击切换
+  modeChip.addEventListener('click', () => {
+    chrome.storage.local.get(['globalMode'], (data) => {
+      const next = !(data.globalMode === true);
+      chrome.storage.local.set({ globalMode: next }, () => {
+        // 通知 background 重新应用代理
+        chrome.runtime.sendMessage({ action: 'setMode' }, () => {
+          refreshModeChip();
+        });
+      });
     });
   });
 }
